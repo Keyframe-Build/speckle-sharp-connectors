@@ -12,16 +12,34 @@ public class NodeConverter(IGeometryConverter geometryConverter) : INodeConverte
   public Base Convert(IfcModel model, IfcNode node)
   {
     var b = new Base();
-    if (node is IfcPropSet ps)
-    {
-      b["Name"] = ps.Name;
-      b["GlobalId"] = ps.Guid;
-    }
 
     // https://github.com/specklesystems/speckle-server/issues/1180
     b["ifc_type"] = node.Type;
 
-    // This is required because "speckle_type" has no setter, but is backed by a private field.
+    if (node is IfcContext prj)
+    {
+      b["LongName"] = prj.LongName;
+      b["Phase"] = prj.Phase;
+    } else
+    if (node is IfcSite site)
+    {
+      b["RefLatitude"] = site.RefLatitude;
+      b["RefLongitude"] = site.RefLongitude;
+      b["RefElevation"] = site.RefElevation;
+    } else
+    if (node is IfcPropSet ps)
+    {
+      b["Name"] = ps.Name;
+      b["GlobalId"] = ps.Guid;
+    } else
+    if (node is IfcMapConversion mc)
+    {
+      b["Eastings"] = mc.Eastings;
+      b["Northings"] = mc.Northings;
+      b["OrthogonalHeight"] = mc.OrthogonalHeight;
+    }
+ 
+   // This is required because "speckle_type" has no setter, but is backed by a private field.
     var baseType = typeof(Base);
     var typeField = baseType.GetField("_type", BindingFlags.Instance | BindingFlags.NonPublic);
     typeField?.SetValue(b, node.Type);
@@ -29,7 +47,7 @@ public class NodeConverter(IGeometryConverter geometryConverter) : INodeConverte
     // Guid is null for property values, and other Ifc entities not derived from IfcRoot
     b.applicationId = node.Guid;
 
-    // This is the express ID used to identify an entity wihtin a file.
+    // This is the express ID used to identify an entity within a file.
     b["expressID"] = node.Id;
 
     // Even if there is no geometry, this will return an empty collection.
@@ -42,7 +60,7 @@ public class NodeConverter(IGeometryConverter geometryConverter) : INodeConverte
     }
 
     // Create the children
-    var children = node.GetChildren().Select(x => Convert(model, x)).ToList();
+    var children = node.GetPublishedChildren().Select(x => Convert(model, x)).ToList();
     b["@elements"] = children;
 
     // Add the properties
