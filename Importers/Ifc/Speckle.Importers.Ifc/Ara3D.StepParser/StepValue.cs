@@ -97,6 +97,23 @@ public class StepNumber : StepValue
   }
 }
 
+public class StepInteger : StepValue
+{
+  public readonly ByteSpan Span;
+  public int Value => Span.ToInt();
+
+  public StepInteger(ByteSpan span) => Span = span;
+
+  public override string ToString() => $"{Value}";
+
+  public static StepInteger Create(StepToken token)
+  {
+    Debug.Assert(token.Type == StepTokenType.Number);
+    var span = token.Span;
+    return new(span);
+  }
+}
+
 public class StepId : StepValue
 {
   public readonly uint Id;
@@ -118,6 +135,20 @@ public class StepId : StepValue
       id = id * 10 + span.Ptr[i] - '0';
     }
     return new StepId(id);
+  }
+
+  public override bool Equals(object? obj)
+  {
+    if (obj is StepId other)
+    {
+      return Id == other.Id;
+    }
+    return false;
+  }
+
+  public override int GetHashCode()
+  {
+    return Id.GetHashCode();
   }
 }
 
