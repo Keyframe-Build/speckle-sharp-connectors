@@ -1,5 +1,4 @@
 using Speckle.Connectors.DUI.Bridge;
-using Speckle.Connectors.DUI.Eventing;
 using Speckle.Connectors.DUI.Models;
 using Speckle.Connectors.DUI.Utils;
 
@@ -7,22 +6,21 @@ namespace Speckle.Connectors.Autocad.HostApp;
 
 public class AutocadDocumentStore : DocumentModelStore
 {
-  private readonly string _nullDocumentName = "Null Doc";
+  private const string NULL_DOCUMENT_NAME = "Null Doc";
   private string _previousDocName;
   private readonly AutocadDocumentManager _autocadDocumentManager;
-  private readonly IEventAggregator _eventAggregator;
+  private readonly ITopLevelExceptionHandler _topLevelExceptionHandler;
 
   public AutocadDocumentStore(
     IJsonSerializer jsonSerializer,
     AutocadDocumentManager autocadDocumentManager,
-    ITopLevelExceptionHandler topLevelExceptionHandler,
-    IEventAggregator eventAggregator
+    ITopLevelExceptionHandler topLevelExceptionHandler
   )
     : base(jsonSerializer)
   {
     _autocadDocumentManager = autocadDocumentManager;
-    _eventAggregator = eventAggregator;
-    _previousDocName = _nullDocumentName;
+    _topLevelExceptionHandler = topLevelExceptionHandler;
+    _previousDocName = NULL_DOCUMENT_NAME;
 
     // POC: Will be addressed to move it into AutocadContext!
     if (Application.DocumentManager.MdiActiveDocument != null)
@@ -42,9 +40,9 @@ public class AutocadDocumentStore : DocumentModelStore
     //  OnDocChangeInternal((Document)args.DocumentWindow.Document);
   }
 
-  private async void OnDocChangeInternal(Document? doc)
+  private void OnDocChangeInternal(Document? doc)
   {
-    var currentDocName = doc != null ? doc.Name : _nullDocumentName;
+    var currentDocName = doc != null ? doc.Name : NULL_DOCUMENT_NAME;
     if (_previousDocName == currentDocName)
     {
       return;
@@ -52,7 +50,7 @@ public class AutocadDocumentStore : DocumentModelStore
 
     _previousDocName = currentDocName;
     LoadState();
-    await _eventAggregator.GetEvent<DocumentStoreChangedEvent>().PublishAsync(new object());
+    OnDocumentChanged();
   }
 
   protected override void LoadState()

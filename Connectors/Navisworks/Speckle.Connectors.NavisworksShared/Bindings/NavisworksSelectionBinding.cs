@@ -6,7 +6,7 @@ namespace Speckle.Connector.Navisworks.Bindings;
 
 public class NavisworksSelectionBinding : ISelectionBinding
 {
-  private readonly IAppIdleManager _appIdleManager;
+  private readonly IAppIdleManager _idleManager;
   private readonly IElementSelectionService _selectionService;
   private const string SELECTION_EVENT = "setSelection";
   public string Name { get; } = "selectionBinding";
@@ -18,20 +18,20 @@ public class NavisworksSelectionBinding : ISelectionBinding
     IElementSelectionService selectionService
   )
   {
+    _idleManager = idleManager;
     _selectionService = selectionService;
-    _appIdleManager = idleManager;
     Parent = parent;
 
     NavisworksApp.ActiveDocument.CurrentSelection.Changed += OnSelectionChange;
   }
 
   private void OnSelectionChange(object? o, EventArgs eventArgs) =>
-    _appIdleManager.SubscribeToIdle(nameof(NavisworksSelectionBinding), async () => await UpdateSelectionAsync());
+    _idleManager.SubscribeToIdle(nameof(NavisworksSelectionBinding), async () => await UpdateSelectionAsync());
 
   private async Task UpdateSelectionAsync()
   {
     var selInfo = GetSelection();
-    await Parent.Send<SelectionInfo>(SELECTION_EVENT, selInfo);
+    await Parent.Send(SELECTION_EVENT, selInfo);
   }
 
   public SelectionInfo GetSelection()
@@ -52,7 +52,7 @@ public class NavisworksSelectionBinding : ISelectionBinding
     );
 
     return new SelectionInfo(
-      [.. selectedObjectsIds],
+      selectedObjectsIds,
       $"{selectedObjectsIds.Count} object{(selectedObjectsIds.Count != 1 ? "s" : "")}"
     );
   }

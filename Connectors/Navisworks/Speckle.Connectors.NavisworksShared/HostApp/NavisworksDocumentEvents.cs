@@ -9,17 +9,15 @@ namespace Speckle.Connector.Navisworks.HostApp;
 /// Manages document and model state change notifications for the Navisworks connector.
 /// Coalesces various document events into batched updates to be processed during idle time.
 /// </summary>
-public sealed class NavisworksDocumentEvents : IDisposable
+public sealed class NavisworksDocumentEvents
 {
   private readonly IServiceProvider _serviceProvider;
   private readonly ITopLevelExceptionHandler _topLevelExceptionHandler;
   private readonly IAppIdleManager _idleManager;
-  private readonly IBrowserBridge _parent;
   private readonly object _subscriptionLock = new();
 
   private bool _isSubscribed;
   private bool _isProcessing;
-  private bool _disposed;
 
   private int _priorModelCount;
   private int _finalModelCount;
@@ -28,20 +26,15 @@ public sealed class NavisworksDocumentEvents : IDisposable
   /// Initializes a new instance of the <see cref="NavisworksDocumentEvents"/> class and subscribes to document events.
   /// </summary>
   /// <param name="serviceProvider">The service provider for dependency injection.</param>
-  /// <param name="topLevelExceptionHandler">Handles exceptions during event processing.</param>
-  /// <param name="idleManager">Manages idle processing.</param>
   public NavisworksDocumentEvents(
     IServiceProvider serviceProvider,
     ITopLevelExceptionHandler topLevelExceptionHandler,
-    IAppIdleManager idleManager,
-    IBrowserBridge parent
+    IAppIdleManager idleManager
   )
   {
     _serviceProvider = serviceProvider;
     _topLevelExceptionHandler = topLevelExceptionHandler;
     _idleManager = idleManager;
-
-    _parent = parent;
 
     SubscribeToDocumentModelEvents();
   }
@@ -61,8 +54,8 @@ public sealed class NavisworksDocumentEvents : IDisposable
       var activeDocument = NavisworksApp.ActiveDocument;
       if (activeDocument != null)
       {
-        activeDocument.Models.CollectionChanging += HandleDocumentModelCountChanging;
         activeDocument.Models.CollectionChanged += HandleDocumentModelCountChanged;
+        activeDocument.Models.CollectionChanging += HandleDocumentModelCountChanging;
       }
 
       _isSubscribed = true;
@@ -124,48 +117,7 @@ public sealed class NavisworksDocumentEvents : IDisposable
     }
   }
 
-  /// <summary>
-  /// Processes model state changes by updating the store and notifying commands.
-  /// </summary>
-  private async Task NotifyValidModelStateChange()
-  {
-    if (_isProcessing)
-    {
-      return;
-    }
-
-    _isProcessing = true;
-
-    try
-    {
-      var store = _serviceProvider.GetRequiredService<NavisworksDocumentModelStore>();
-      var basicBinding = _serviceProvider.GetRequiredService<IBasicConnectorBinding>();
-      var commands = (basicBinding as NavisworksBasicConnectorBinding)?.Commands;
-
-      switch (_finalModelCount)
-      {
-        case 0 when _priorModelCount > 0:
-          // Clear the store when models are removed
-          store.ClearAndSave();
-          break;
-        case > 0 when _priorModelCount == 0:
-          // Load state when models are added
-          store.ReloadState();
-          break;
-      }
-
-      if (commands != null)
-      {
-        await commands.NotifyDocumentChanged();
-      }
-    }
-    finally
-    {
-      _isProcessing = false;
-    }
-  }
-
-  private void UnsubscribeFromDocumentModelEvents()
+  private void UnsubscribeFromDocumentModelEvents(object _)
   {
     var activeDocument = NavisworksApp.ActiveDocument;
     if (activeDocument != null)
@@ -181,36 +133,10 @@ public sealed class NavisworksDocumentEvents : IDisposable
     document.Models.CollectionChanged -= HandleDocumentModelCountChanged;
     document.Models.CollectionChanging -= HandleDocumentModelCountChanging;
 
-    var sendBinding = _serviceProvider.GetRequiredService<NavisworksSendBinding>();
+    var sendBinding = _serviceProvider
+      .GetRequiredService<IEnumerable<IBinding>>()
+      .OfType<NavisworksSendBinding>()
+      .First();
     sendBinding.CancelAllSendOperations();
-  }
-
-  /// <summary>
-  /// Disposes of resources and unsubscribes from events.
-  /// </summary>
-  public void Dispose()
-  {
-    Dispose(true);
-    GC.SuppressFinalize(this);
-  }
-
-  private void Dispose(bool disposing)
-  {
-    if (_disposed)
-    {
-      return;
-    }
-
-    if (disposing)
-    {
-      UnsubscribeFromDocumentModelEvents();
-    }
-
-    _disposed = true;
-  }
-
-  ~NavisworksDocumentEvents()
-  {
-    Dispose(false);
   }
 }

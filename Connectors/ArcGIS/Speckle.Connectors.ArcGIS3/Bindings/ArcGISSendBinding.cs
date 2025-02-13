@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using ArcGIS.Core.Data;
 using ArcGIS.Desktop.Core;
 using ArcGIS.Desktop.Editing.Events;
+using ArcGIS.Desktop.Framework.Threading.Tasks;
 using ArcGIS.Desktop.Mapping;
 using ArcGIS.Desktop.Mapping.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,7 +16,6 @@ using Speckle.Connectors.Common.Operations;
 using Speckle.Connectors.Common.Threading;
 using Speckle.Connectors.DUI.Bindings;
 using Speckle.Connectors.DUI.Bridge;
-using Speckle.Connectors.DUI.Eventing;
 using Speckle.Connectors.DUI.Exceptions;
 using Speckle.Connectors.DUI.Logging;
 using Speckle.Connectors.DUI.Models;
@@ -39,7 +39,7 @@ public sealed class ArcGISSendBinding : ISendBinding
   private readonly DocumentModelStore _store;
   private readonly IServiceProvider _serviceProvider;
   private readonly List<ISendFilter> _sendFilters;
-  private readonly CancellationManager _cancellationManager;
+  private readonly ICancellationManager _cancellationManager;
   private readonly ISendConversionCache _sendConversionCache;
   private readonly IOperationProgressManager _operationProgressManager;
   private readonly ILogger<ArcGISSendBinding> _logger;
@@ -64,14 +64,13 @@ public sealed class ArcGISSendBinding : ISendBinding
     IBrowserBridge parent,
     IEnumerable<ISendFilter> sendFilters,
     IServiceProvider serviceProvider,
-    CancellationManager cancellationManager,
+    ICancellationManager cancellationManager,
     ISendConversionCache sendConversionCache,
     IOperationProgressManager operationProgressManager,
     ILogger<ArcGISSendBinding> logger,
     IArcGISConversionSettingsFactory arcGisConversionSettingsFactory,
     MapMembersUtils mapMemberUtils,
     IThreadContext threadContext,
-    IEventAggregator eventAggregator,
     ITopLevelExceptionHandler topLevelExceptionHandler
   )
   {
@@ -90,7 +89,10 @@ public sealed class ArcGISSendBinding : ISendBinding
     Parent = parent;
     Commands = new SendBindingUICommands(parent);
     SubscribeToArcGISEvents();
-    eventAggregator.GetEvent<DocumentStoreChangedEvent>().Subscribe(OnDocumentStoreChangedEvent);
+    _store.DocumentChanged += (_, _) =>
+    {
+      _sendConversionCache.ClearCache();
+    };
   }
 
   private void OnDocumentStoreChangedEvent(object _) => _sendConversionCache.ClearCache();
@@ -100,7 +102,7 @@ public sealed class ArcGISSendBinding : ISendBinding
     LayersRemovedEvent.Subscribe(
       a =>
         _topLevelExceptionHandler.FireAndForget(
-          async () => await _threadContext.RunOnWorkerAsync(async () => await GetIdsForLayersRemovedEvent(a))
+          async () => await QueuedTask.Run(async () => await GetIdsForLayersRemovedEvent(a))
         ),
       true
     );
@@ -108,7 +110,7 @@ public sealed class ArcGISSendBinding : ISendBinding
     StandaloneTablesRemovedEvent.Subscribe(
       a =>
         _topLevelExceptionHandler.FireAndForget(
-          async () => await _threadContext.RunOnWorkerAsync(async () => await GetIdsForStandaloneTablesRemovedEvent(a))
+          async () => await QueuedTask.Run(async () => await GetIdsForStandaloneTablesRemovedEvent(a))
         ),
       true
     );
@@ -116,7 +118,7 @@ public sealed class ArcGISSendBinding : ISendBinding
     MapPropertyChangedEvent.Subscribe(
       a =>
         _topLevelExceptionHandler.FireAndForget(
-          async () => await _threadContext.RunOnWorkerAsync(async () => await GetIdsForMapPropertyChangedEvent(a))
+          async () => await QueuedTask.Run(async () => await GetIdsForMapPropertyChangedEvent(a))
         ),
       true
     ); // Map units, CRS etc.
@@ -124,8 +126,7 @@ public sealed class ArcGISSendBinding : ISendBinding
     MapMemberPropertiesChangedEvent.Subscribe(
       a =>
         _topLevelExceptionHandler.FireAndForget(
-          async () =>
-            await _threadContext.RunOnWorkerAsync(async () => await GetIdsForMapMemberPropertiesChangedEvent(a))
+          async () => await QueuedTask.Run(async () => await GetIdsForMapMemberPropertiesChangedEvent(a))
         ),
       true
     ); // e.g. Layer name
@@ -134,7 +135,7 @@ public sealed class ArcGISSendBinding : ISendBinding
       _ =>
         _topLevelExceptionHandler.FireAndForget(async () =>
         {
-          await _threadContext.RunOnWorker(SubscribeToMapMembersDataSourceChange);
+          await QueuedTask.Run(SubscribeToMapMembersDataSourceChange);
         }),
       true
     );
@@ -372,24 +373,28 @@ public sealed class ArcGISSendBinding : ISendBinding
         throw new InvalidOperationException("No publish model card was found.");
       }
 
-      CancellationToken cancellationToken = _cancellationManager.InitCancellationTokenSource(modelCardId);
+      using var cancellationItem = _cancellationManager.GetCancellationItem(modelCardId);
 
       using var scope = _serviceProvider.CreateScope();
-      scope
-        .ServiceProvider.GetRequiredService<IConverterSettingsStore<ArcGISConversionSettings>>()
-        .Initialize(
-          _arcGISConversionSettingsFactory.Create(
-            Project.Current,
-            MapView.Active.Map,
-            new CRSoffsetRotation(MapView.Active.Map)
-          )
-        );
-      List<MapMember> mapMembers = modelCard
-        .SendFilter.NotNull()
-        .RefreshObjectIds()
-        .Select(id => (MapMember)MapView.Active.Map.FindLayer(id) ?? MapView.Active.Map.FindStandaloneTable(id))
-        .Where(obj => obj != null)
-        .ToList();
+      List<MapMember> mapMembers = await QueuedTask.Run(() =>
+      {
+        scope
+          .ServiceProvider.GetRequiredService<IConverterSettingsStore<ArcGISConversionSettings>>()
+          .Initialize(
+            _arcGISConversionSettingsFactory.Create(
+              Project.Current,
+              MapView.Active.Map,
+              new CRSoffsetRotation(MapView.Active.Map)
+            )
+          );
+
+        return modelCard
+          .SendFilter.NotNull()
+          .RefreshObjectIds()
+          .Select(id => (MapMember)MapView.Active.Map.FindLayer(id) ?? MapView.Active.Map.FindStandaloneTable(id))
+          .Where(obj => obj != null)
+          .ToList();
+      });
 
       if (mapMembers.Count == 0)
       {
@@ -397,26 +402,29 @@ public sealed class ArcGISSendBinding : ISendBinding
         throw new SpeckleSendFilterException("No objects were found to convert. Please update your publish filter!");
       }
 
-      // subscribe to the selected layer events
-      foreach (MapMember mapMember in mapMembers)
+      await QueuedTask.Run(() =>
       {
-        if (mapMember is FeatureLayer featureLayer)
+        // subscribe to the selected layer events
+        foreach (MapMember mapMember in mapMembers)
         {
-          SubscribeToFeatureLayerDataSourceChange(featureLayer);
+          if (mapMember is FeatureLayer featureLayer)
+          {
+            SubscribeToFeatureLayerDataSourceChange(featureLayer);
+          }
+          else if (mapMember is StandaloneTable table)
+          {
+            SubscribeToTableDataSourceChange(table);
+          }
         }
-        else if (mapMember is StandaloneTable table)
-        {
-          SubscribeToTableDataSourceChange(table);
-        }
-      }
+      });
 
       var sendResult = await scope
         .ServiceProvider.GetRequiredService<SendOperation<MapMember>>()
         .Execute(
           mapMembers,
           modelCard.GetSendInfo("ArcGIS"), // POC: get host app name from settings? same for GetReceiveInfo
-          _operationProgressManager.CreateOperationProgressEventHandler(Parent, modelCardId, cancellationToken),
-          cancellationToken
+          _operationProgressManager.CreateOperationProgressEventHandler(Parent, modelCardId, cancellationItem.Token),
+          cancellationItem.Token
         );
 
       await Commands.SetModelSendResult(modelCardId, sendResult.RootObjId, sendResult.ConversionResults);

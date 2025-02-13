@@ -9,9 +9,9 @@ namespace Speckle.Connectors.Autocad.Bindings;
 
 public class AutocadSelectionBinding : ISelectionBinding
 {
-  private const string SELECTION_EVENT = "setSelection";
   private readonly ITopLevelExceptionHandler _topLevelExceptionHandler;
   private readonly IThreadContext _threadContext;
+  private const string SELECTION_EVENT = "setSelection";
   private readonly HashSet<Document> _visitedDocuments = new();
 
   public string Name => "selectionBinding";
@@ -20,13 +20,13 @@ public class AutocadSelectionBinding : ISelectionBinding
 
   public AutocadSelectionBinding(
     IBrowserBridge parent,
-    IThreadContext threadContext,
-    ITopLevelExceptionHandler topLevelExceptionHandler
+    ITopLevelExceptionHandler topLevelExceptionHandler,
+    IThreadContext threadContext
   )
   {
     _topLevelExceptionHandler = topLevelExceptionHandler;
-    Parent = parent;
     _threadContext = threadContext;
+    Parent = parent;
 
     // POC: Use here Context for doc. In converters it's OK but we are still lacking to use context into bindings.
     // It is with the case of if binding created with already a document

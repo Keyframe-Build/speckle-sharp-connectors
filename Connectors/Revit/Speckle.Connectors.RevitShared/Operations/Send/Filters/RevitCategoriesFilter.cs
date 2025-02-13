@@ -4,6 +4,7 @@ using Speckle.Connectors.DUI.Models.Card.SendFilter;
 using Speckle.Connectors.DUI.Utils;
 using Speckle.Connectors.Revit.HostApp;
 using Speckle.Converters.RevitShared.Helpers;
+using Speckle.Sdk.Common;
 
 namespace Speckle.Connectors.RevitShared.Operations.Send.Filters;
 
@@ -27,7 +28,7 @@ public class RevitCategoriesFilter : DiscriminatedObject, ISendFilter, IRevitSen
   public RevitCategoriesFilter(RevitContext revitContext)
   {
     _revitContext = revitContext;
-    _doc = _revitContext.UIApplication?.ActiveUIDocument.Document;
+    _doc = _revitContext.UIApplication.NotNull().ActiveUIDocument.Document;
 
     GetCategories();
   }

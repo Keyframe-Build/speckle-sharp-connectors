@@ -6,31 +6,50 @@ using Speckle.Sdk;
 
 namespace Speckle.Connectors.CSiShared.Bindings;
 
-public class CsiSharedBasicConnectorBinding(
-  IBrowserBridge parent,
-  ISpeckleApplication speckleApplication,
-  DocumentModelStore store
-) : IBasicConnectorBinding
+public class CsiSharedBasicConnectorBinding : IBasicConnectorBinding
 {
+  private readonly ISpeckleApplication _speckleApplication;
+  private readonly DocumentModelStore _store;
+  private readonly ITopLevelExceptionHandler _topLevelExceptionHandler;
   public string Name => "baseBinding";
-  public IBrowserBridge Parent { get; } = parent;
-  public BasicConnectorBindingCommands Commands { get; } = new(parent);
+  public IBrowserBridge Parent { get; }
+  public BasicConnectorBindingCommands Commands { get; }
 
-  public string GetConnectorVersion() => speckleApplication.SpeckleVersion;
+  public CsiSharedBasicConnectorBinding(
+    IBrowserBridge parent,
+    ISpeckleApplication speckleApplication,
+    DocumentModelStore store,
+    ITopLevelExceptionHandler topLevelExceptionHandler
+  )
+  {
+    Parent = parent;
+    _speckleApplication = speckleApplication;
+    _store = store;
+    _topLevelExceptionHandler = topLevelExceptionHandler;
+    Commands = new BasicConnectorBindingCommands(Parent);
 
-  public string GetSourceApplicationName() => speckleApplication.Slug;
+    _store.DocumentChanged += (_, _) =>
+      _topLevelExceptionHandler.FireAndForget(async () =>
+      {
+        await Commands.NotifyDocumentChanged();
+      });
+  }
 
-  public string GetSourceApplicationVersion() => speckleApplication.HostApplicationVersion;
+  public string GetConnectorVersion() => _speckleApplication.SpeckleVersion;
+
+  public string GetSourceApplicationName() => _speckleApplication.Slug;
+
+  public string GetSourceApplicationVersion() => _speckleApplication.HostApplicationVersion;
 
   public DocumentInfo? GetDocumentInfo() => new("ETABS Model", "ETABS Model", "1");
 
-  public DocumentModelStore GetDocumentState() => store;
+  public DocumentModelStore GetDocumentState() => _store;
 
-  public void AddModel(ModelCard model) => store.AddModel(model);
+  public void AddModel(ModelCard model) => _store.AddModel(model);
 
-  public void UpdateModel(ModelCard model) => store.UpdateModel(model);
+  public void UpdateModel(ModelCard model) => _store.UpdateModel(model);
 
-  public void RemoveModel(ModelCard model) => store.RemoveModel(model);
+  public void RemoveModel(ModelCard model) => _store.RemoveModel(model);
 
   public Task HighlightModel(string modelCardId) => Task.CompletedTask;
 

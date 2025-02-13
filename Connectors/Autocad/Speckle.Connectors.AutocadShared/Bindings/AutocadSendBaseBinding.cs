@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Autodesk.AutoCAD.DatabaseServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Speckle.Connectors.Autocad.HostApp;
 using Speckle.Connectors.Autocad.HostApp.Extensions;
 using Speckle.Connectors.Autocad.Operations.Send;
 using Speckle.Connectors.Common.Caching;
@@ -11,7 +11,6 @@ using Speckle.Connectors.Common.Operations;
 using Speckle.Connectors.Common.Threading;
 using Speckle.Connectors.DUI.Bindings;
 using Speckle.Connectors.DUI.Bridge;
-using Speckle.Connectors.DUI.Eventing;
 using Speckle.Connectors.DUI.Exceptions;
 using Speckle.Connectors.DUI.Logging;
 using Speckle.Connectors.DUI.Models;
@@ -23,6 +22,7 @@ using Speckle.Sdk.Common;
 
 namespace Speckle.Connectors.Autocad.Bindings;
 
+[SuppressMessage("ReSharper", "AsyncVoidMethod")]
 public abstract class AutocadSendBaseBinding : ISendBinding
 {
   public string Name => "sendBinding";
@@ -31,16 +31,16 @@ public abstract class AutocadSendBaseBinding : ISendBinding
   public IBrowserBridge Parent { get; }
 
   private readonly DocumentModelStore _store;
-  private readonly IAutocadIdleManager _idleManager;
   private readonly List<ISendFilter> _sendFilters;
-  private readonly CancellationManager _cancellationManager;
+  private readonly ICancellationManager _cancellationManager;
   private readonly IServiceProvider _serviceProvider;
   private readonly ISendConversionCache _sendConversionCache;
   private readonly IOperationProgressManager _operationProgressManager;
   private readonly ILogger<AutocadSendBinding> _logger;
-  private readonly ITopLevelExceptionHandler _topLevelExceptionHandler;
   private readonly ISpeckleApplication _speckleApplication;
   private readonly IThreadContext _threadContext;
+  private readonly ITopLevelExceptionHandler _topLevelExceptionHandler;
+  private readonly IAppIdleManager _idleManager;
 
   /// <summary>
   /// Used internally to aggregate the changed objects' id. Note we're using a concurrent dictionary here as the expiry check method is not thread safe, and this was causing problems. See:
@@ -52,22 +52,20 @@ public abstract class AutocadSendBaseBinding : ISendBinding
 
   protected AutocadSendBaseBinding(
     DocumentModelStore store,
-    IAutocadIdleManager idleManager,
     IBrowserBridge parent,
     IEnumerable<ISendFilter> sendFilters,
-    CancellationManager cancellationManager,
+    ICancellationManager cancellationManager,
     IServiceProvider serviceProvider,
     ISendConversionCache sendConversionCache,
     IOperationProgressManager operationProgressManager,
     ILogger<AutocadSendBinding> logger,
     ISpeckleApplication speckleApplication,
-    ITopLevelExceptionHandler topLevelExceptionHandler,
     IThreadContext threadContext,
-    IEventAggregator eventAggregator
+    ITopLevelExceptionHandler topLevelExceptionHandler,
+    IAppIdleManager idleManager
   )
   {
     _store = store;
-    _idleManager = idleManager;
     _serviceProvider = serviceProvider;
     _cancellationManager = cancellationManager;
     _sendFilters = sendFilters.ToList();
@@ -77,6 +75,7 @@ public abstract class AutocadSendBaseBinding : ISendBinding
     _speckleApplication = speckleApplication;
     _threadContext = threadContext;
     _topLevelExceptionHandler = topLevelExceptionHandler;
+    _idleManager = idleManager;
     Parent = parent;
     Commands = new SendBindingUICommands(parent);
 
@@ -89,11 +88,11 @@ public abstract class AutocadSendBaseBinding : ISendBinding
       SubscribeToObjectChanges(Application.DocumentManager.CurrentDocument);
     }
     // Since ids of the objects generates from same seed, we should clear the cache always whenever doc swapped.
-
-    eventAggregator.GetEvent<DocumentStoreChangedEvent>().Subscribe(OnDocumentStoreChangedEvent);
+    _store.DocumentChanged += (_, _) =>
+    {
+      _sendConversionCache.ClearCache();
+    };
   }
-
-  private void OnDocumentStoreChangedEvent(object _) => _sendConversionCache.ClearCache();
 
   private readonly List<string> _docSubsTracker = new();
 
@@ -110,10 +109,8 @@ public abstract class AutocadSendBaseBinding : ISendBinding
     doc.Database.ObjectModified += (_, e) => OnObjectChanged(e.DBObject);
   }
 
-  private void OnObjectChanged(DBObject dbObject)
-  {
+  private void OnObjectChanged(DBObject dbObject) =>
     _topLevelExceptionHandler.CatchUnhandled(() => OnChangeChangedObjectIds(dbObject));
-  }
 
   private void OnChangeChangedObjectIds(DBObject dBObject)
   {
@@ -148,7 +145,7 @@ public abstract class AutocadSendBaseBinding : ISendBinding
   public List<ICardSetting> GetSendSettings() => [];
 
   public async Task Send(string modelCardId) =>
-    await _threadContext.RunOnWorkerAsync(async () => await SendInternal(modelCardId));
+    await _threadContext.RunOnMainAsync(async () => await SendInternal(modelCardId));
 
   protected abstract void InitializeSettings(IServiceProvider serviceProvider);
 
@@ -165,7 +162,7 @@ public abstract class AutocadSendBaseBinding : ISendBinding
       using var scope = _serviceProvider.CreateScope();
       InitializeSettings(scope.ServiceProvider);
 
-      CancellationToken cancellationToken = _cancellationManager.InitCancellationTokenSource(modelCardId);
+      using var cancellationItem = _cancellationManager.GetCancellationItem(modelCardId);
 
       // Disable document activation (document creation and document switch)
       // Not disabling results in DUI model card being out of sync with the active document
@@ -188,8 +185,8 @@ public abstract class AutocadSendBaseBinding : ISendBinding
         .Execute(
           autocadObjects,
           modelCard.GetSendInfo(_speckleApplication.Slug),
-          _operationProgressManager.CreateOperationProgressEventHandler(Parent, modelCardId, cancellationToken),
-          cancellationToken
+          _operationProgressManager.CreateOperationProgressEventHandler(Parent, modelCardId, cancellationItem.Token),
+          cancellationItem.Token
         );
 
       await Commands.SetModelSendResult(modelCardId, sendResult.RootObjId, sendResult.ConversionResults);
