@@ -13,8 +13,6 @@ public class IfcRelation : IfcEntity
   public IfcRelation(IfcGraph graph, StepInstance lineData, StepId from, StepList to)
     : base(graph, lineData)
   {
-    if (!IsIfcRoot)
-      throw new SpeckleIfcException("Expected relation to be an IFC root entity");
     From = from;
     To = to;
   }
