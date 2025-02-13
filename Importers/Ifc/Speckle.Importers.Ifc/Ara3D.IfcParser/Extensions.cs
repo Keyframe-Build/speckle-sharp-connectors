@@ -29,7 +29,7 @@ public static class IfcExtensions
   public static double AsNumber(this StepValue value) => value is StepUnassigned ? 0 : ((StepNumber)value).Value;
 
   public static List<StepValue> AsList(this StepValue value) =>
-    value is StepUnassigned ? new List<StepValue>() : ((StepList)value).Values;
+    value is StepUnassigned ? new List<StepValue>() : new List<StepValue>() { value };
 
   public static List<uint> AsIdList(this StepValue value) =>
     value is StepUnassigned ? new List<uint>() : value.AsList().Select(AsId).ToList();
@@ -153,16 +153,16 @@ public static class IfcExtensions
     switch (sv)
     {
       case StepEntity stepEntity:
-      {
-        var attr = stepEntity.Attributes;
-        if (attr.Values.Count == 0)
-          return stepEntity.ToString();
+        {
+          var attr = stepEntity.Attributes;
+          if (attr.Values.Count == 0)
+            return stepEntity.ToString();
 
-        if (attr.Values.Count == 1)
-          return attr.Values[0].ToJsonObject();
+          if (attr.Values.Count == 1)
+            return attr.Values[0].ToJsonObject();
 
-        return attr.Values.Select(ToJsonObject).ToList();
-      }
+          return attr.Values.Select(ToJsonObject).ToList();
+        }
 
       case StepId stepId:
         return stepId.Id;
@@ -193,5 +193,15 @@ public static class IfcExtensions
       default:
         throw new ArgumentOutOfRangeException(nameof(sv));
     }
+  }
+
+  public static string ToPlaneAngle(this StepList sl)
+  {
+    var degrees = sl.Values[0].AsNumber();
+    var minutes = sl.Values[1].AsNumber();
+    var seconds = sl.Values[2].AsNumber();
+    var m_seconds = sl.Values[3].AsNumber();
+
+    return $"{degrees}° {minutes}' {seconds}\" {m_seconds}";
   }
 }
