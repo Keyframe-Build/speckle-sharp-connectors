@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Ara3D.Logging;
 using Ara3D.Utils;
+using Speckle.Importers.Ifc.Ara3D.IfcParser.Schema;
 using Speckle.Importers.Ifc.Ara3D.StepParser;
 
 namespace Speckle.Importers.Ifc.Ara3D.IfcParser;
@@ -9,7 +10,7 @@ namespace Speckle.Importers.Ifc.Ara3D.IfcParser;
 /// This is a high-level representation of an IFC model as a graph of nodes and relations.
 /// It also contains the  properties, and property sets.
 /// </summary>
-public class IfcGraph
+public sealed class IfcGraph
 {
   public static IfcGraph Load(FilePath fp, ILogger? logger = null) =>
     new IfcGraph(new StepDocument(fp, logger), logger);
@@ -21,14 +22,17 @@ public class IfcGraph
   public Dictionary<uint, List<IfcRelation>> RelationsByNode { get; } = new Dictionary<uint, List<IfcRelation>>();
   public Dictionary<uint, List<IfcPropSet>> PropertySetsByNode { get; } = new Dictionary<uint, List<IfcPropSet>>();
 
-  public IReadOnlyList<uint> RootIds { get; }
+  public uint IfcProjectId { get; }
 
   public IfcNode AddNode(IfcNode n) => Nodes[n.Id] = n;
 
   public IfcRelation AddRelation(IfcRelation r)
   {
     Relations.Add(r);
-    RelationsByNode.Add(r.From.Id, r);
+    var id = r.From.Id;
+    if (!RelationsByNode.ContainsKey(id))
+      RelationsByNode[id] = new();
+    RelationsByNode[id].Add(r);
     return r;
   }
 
@@ -43,9 +47,6 @@ public class IfcGraph
     {
       if (!inst.IsValid())
         continue;
-
-      // TODO: converting entities into numerical hashes would likely improve performance significantly.
-      // Here we are doing a lot of comparisons.
 
       // Property Values
       if (inst.Type.Equals("IFCPROPERTYSINGLEVALUE"))
@@ -126,7 +127,7 @@ public class IfcGraph
       else if (inst.Type.Equals("IFCELEMENTQUANTITY"))
       {
         var e = d.GetInstanceWithData(inst);
-        AddNode(new IfcPropSet(this, e, (StepList)e[5]));
+        AddNode(new IfcPropSet(this, e, e[5] as StepList));
       }
       // Aggregate relation
       else if (inst.Type.Equals("IFCRELAGGREGATES"))
@@ -210,7 +211,9 @@ public class IfcGraph
       var ps = psr.PropSet;
       foreach (var id in psr.GetRelatedIds())
       {
-        PropertySetsByNode.Add(id, ps);
+        if (!PropertySetsByNode.ContainsKey(id))
+          PropertySetsByNode[id] = [];
+        PropertySetsByNode[id].Add(ps);
       }
     }
 
@@ -275,7 +278,7 @@ public class IfcGraph
     return r;
   }
 
-  public IEnumerable<IfcNode> GetSources() => RootIds.Select(GetNode);
+  public IfcNode GetIfcProject() => GetNode(IfcProjectId);
 
   public IEnumerable<IfcNode> GetPublishedSources() => RootIds.Select(GetNode).Where(r => r.Published);
 

@@ -4,7 +4,7 @@ public static class Consts
 {
   public static readonly string[] Solutions = ["Speckle.Connectors.sln"];
 
-  public static readonly InstallerProject[] InstallerManifests =
+  public static readonly ProjectGroup[] ProjectGroups =
   {
     new("arcgis", [new("Connectors/ArcGIS/Speckle.Connectors.ArcGIS3", "net6.0-windows")]),
     new(
@@ -53,7 +53,7 @@ public static class Consts
       ]
     ),
     new(
-      "tekla-structures",
+      "teklastructures",
       [
         new("Connectors/Tekla/Speckle.Connector.Tekla2023", "net48"),
         new("Connectors/Tekla/Speckle.Connector.Tekla2024", "net48")
@@ -69,7 +69,7 @@ public static class Consts
   };
 }
 
-public readonly record struct InstallerProject(string HostAppSlug, IReadOnlyList<InstallerAsset> Projects)
+public readonly record struct ProjectGroup(string HostAppSlug, IReadOnlyList<InstallerAsset> Projects)
 {
   public override string ToString() => $"{HostAppSlug}";
 }

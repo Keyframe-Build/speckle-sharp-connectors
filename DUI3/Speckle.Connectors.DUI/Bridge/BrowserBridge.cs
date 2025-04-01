@@ -17,7 +17,9 @@ namespace Speckle.Connectors.DUI.Bridge;
 /// Wraps a binding class, and manages its calls from the Frontend to .NET, and sending events from .NET to the the Frontend.
 /// <para>Initially inspired by: https://github.com/johot/WebView2-better-bridge</para>
 /// </summary>
+#pragma warning disable CS0618 // Type or member is obsolete
 [ClassInterface(ClassInterfaceType.AutoDual)]
+#pragma warning restore CS0618 // Type or member is obsolete
 [ComVisible(true)]
 public sealed class BrowserBridge : IBrowserBridge
 {
@@ -30,7 +32,6 @@ public sealed class BrowserBridge : IBrowserBridge
 
   private readonly ITopLevelExceptionHandler _topLevelExceptionHandler;
   private readonly IThreadContext _threadContext;
-  private readonly IThreadOptions _threadOptions;
 
   private readonly IBrowserScriptExecutor _browserScriptExecutor;
   private readonly IJsonSerializer _jsonSerializer;
@@ -62,16 +63,13 @@ public sealed class BrowserBridge : IBrowserBridge
     IJsonSerializer jsonSerializer,
     ILogger<BrowserBridge> logger,
     IBrowserScriptExecutor browserScriptExecutor,
-    IThreadOptions threadOptions,
     ITopLevelExceptionHandler topLevelExceptionHandler
   )
   {
     _threadContext = threadContext;
     _jsonSerializer = jsonSerializer;
     _logger = logger;
-    // Capture the main thread's SynchronizationContext
     _browserScriptExecutor = browserScriptExecutor;
-    _threadOptions = threadOptions;
     _topLevelExceptionHandler = topLevelExceptionHandler;
   }
 
@@ -155,7 +153,7 @@ public sealed class BrowserBridge : IBrowserBridge
       throw new InvalidOperationException("Bridge was not initialized with a binding");
     }
 
-    if (!_bindingMethodCache.TryGetValue(methodName, out MethodInfo method))
+    if (!_bindingMethodCache.TryGetValue(methodName, out MethodInfo? method))
     {
       throw new ArgumentException(
         $"Cannot find method {methodName} in bindings class {_bindingType.NotNull().AssemblyQualifiedName}.",

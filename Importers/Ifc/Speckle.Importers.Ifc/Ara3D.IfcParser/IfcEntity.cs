@@ -1,4 +1,5 @@
-﻿using Speckle.Importers.Ifc.Ara3D.StepParser;
+﻿using Speckle.Importers.Ifc.Ara3D.IfcParser.Schema;
+using Speckle.Importers.Ifc.Ara3D.StepParser;
 
 namespace Speckle.Importers.Ifc.Ara3D.IfcParser;
 
@@ -38,13 +39,13 @@ public class IfcEntity
   // Leaving as a comment for now.
   //&& str.Value.Length == 22;
 
-  public string? Guid => IsIfcRoot ? (this[0] as StepString)?.Value.ToString() : null;
+  public string Guid => ((StepString)this[0]).Value.ToString();
 
-  public uint OwnerId => IsIfcRoot ? (this[1] as StepId)?.Id ?? 0 : 0;
+  public uint OwnerId => (this[1] as StepId)?.Id ?? 0;
 
-  public string? Name => IsIfcRoot ? (this[2] as StepString)?.AsString() : null;
+  public string? Name => (this[2] as StepString)?.AsString();
 
-  public string? Description => IsIfcRoot ? (this[3] as StepString)?.AsString() : null;
+  public string? Description => (this[3] as StepString)?.AsString();
 
   public int Count => LineData.Count;
 
@@ -58,7 +59,7 @@ public class IfcEntity
   public IEnumerable<IfcNode> GetSpatialChildren() =>
     GetOutgoingRelations().OfType<IfcRelationSpatial>().SelectMany(r => r.GetRelatedNodes());
 
-  public IEnumerable<IfcNode> GetChildren() => GetAggregatedChildren().Concat(GetSpatialChildren());
+  public IEnumerable<IfcNode> GetChildren() => GetAggregatedChildren().Concat(GetSpatialChildren()).Distinct();
 
   public IEnumerable<IfcNode> GetPublishedChildren() => GetOutgoingRelations().SelectMany(r => r.GetRelatedNodes()).Where(n => n.Published);
 
