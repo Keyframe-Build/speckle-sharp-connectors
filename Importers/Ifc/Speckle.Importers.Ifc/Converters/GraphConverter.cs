@@ -12,10 +12,6 @@ public sealed class GraphConverter(INodeConverter nodeConverter, IRenderMaterial
 {
   public Base Convert(IfcModel model, IfcGraph graph)
   {
-    var collection = new Collection();
-    var children = graph.GetPublishedSources().Select(x => nodeConverter.Convert(model, x)).ToList();
-    collection.elements = children;
-    return collection;
     Base rootCollection = nodeConverter.Convert(model, graph.GetIfcProject());
 
     //Grabing materials from ProxyManager
