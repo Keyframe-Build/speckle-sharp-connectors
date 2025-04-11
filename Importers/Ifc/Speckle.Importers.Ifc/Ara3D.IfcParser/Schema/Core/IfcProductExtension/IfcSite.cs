@@ -1,0 +1,19 @@
+using Speckle.Importers.Ifc.Ara3D.IfcParser;
+using Speckle.Importers.Ifc.Ara3D.StepParser;
+
+namespace Speckle.Importers.Ifc.Ara3D.IfcParser.Schema;
+
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Maintainability", "CA1501")]
+public class IfcSite : IfcSpatialStructureElement
+{
+  public IfcCompoundPlaneAngleMeasure? RefLatitude =>
+    (this[9] as StepList) is StepList list ? new IfcCompoundPlaneAngleMeasure(list) : null;
+  public IfcCompoundPlaneAngleMeasure? RefLongitude =>
+    (this[10] as StepList) is StepList list ? new IfcCompoundPlaneAngleMeasure(list) : null;
+  public double? RefElevation => (this[11] as StepNumber)?.Value;
+  public string? LandTitleNumber => (this[12] as StepString)?.Value.ToString();
+  public StepId? SiteAddress => this[13] as StepId; // TODO
+
+  public IfcSite(IfcGraph graph, StepInstance lineData)
+    : base(graph, lineData) { }
+}
