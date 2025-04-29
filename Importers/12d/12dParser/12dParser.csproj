@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>_12dParser</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Ara3D.Parakeet" Version="1.4.5" />
+    <PackageReference Include="Ara3D.Parakeet.Grammars" Version="1.4.5" />
+    <PackageReference Include="Ara3D.Utils" Version="1.4.5" />
+    <PackageReference Include="Parakeet" Version="1.1.0" />
+  </ItemGroup>
+
+</Project>
