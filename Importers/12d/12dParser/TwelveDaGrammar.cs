@@ -1,6 +1,7 @@
 using Ara3D.Parakeet;
 using Ara3D.Parakeet.Grammars;
 
+namespace TwelveDaParser;
 public class TwelveDaGrammar : BaseCommonGrammar
 {    
     public Rule NullLine => new DebugRule(Named("null" + WS + "-999" + AnyCharUntilNextLine, "NullLine"), "NullLine");

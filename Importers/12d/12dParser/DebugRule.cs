@@ -1,5 +1,6 @@
 using Ara3D.Parakeet;
 
+namespace TwelveDaParser;
 public class DebugRule : Rule
 {
     private readonly Rule _innerRule;
@@ -10,10 +11,10 @@ public class DebugRule : Rule
         _ruleName = ruleName;
     }
 
-    protected override ParserState MatchImplementation(ParserState state)
+    protected override ParserState? MatchImplementation(ParserState state)
     {
         Console.WriteLine($"Attempting to match rule: {_ruleName} at position {state.Position}");
-        var result = _innerRule.Match(state);
+        ParserState result = _innerRule.Match(state);
         if (result != null)
         {
             Console.WriteLine($"Rule {_ruleName} matched successfully at position {state.Position}");

@@ -1,8 +1,9 @@
 ﻿using Ara3D.Parakeet;
 
-class Program
+namespace TwelveDaParser;
+public static class Program
 {
-    static void Main()
+    public static void Main()
     {
         var grammar = new TwelveDaGrammar();
         
@@ -23,13 +24,14 @@ class Program
         var match = rule.Match(state);
         Console.WriteLine(match);
         
-        if (state == null)
+        if (match == null) 
+        {
             Console.WriteLine("Unrecoverable parser failure");
-
+        }
         else
         {
     
-            while (state.AtEnd() == false)
+            while (!match.AtEnd())
             {
                 
                 Console.WriteLine(match.CurrentLine);
@@ -37,10 +39,7 @@ class Program
             }
         }
 
-        var model = new TwelveDaModel();
-        
-
-        // Convert the parsed characters to an integer
-        //Console.Write(result);
-    }
+    // Convert the parsed characters to an integer
+    //Console.Write(result);
+  }
 }

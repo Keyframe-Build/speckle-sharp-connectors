@@ -1,3 +1,4 @@
+namespace TwelveDaParser;
 public class TwelveDaModel
 {
     public List<string> NullLines { get; set; } = new List<string>();
