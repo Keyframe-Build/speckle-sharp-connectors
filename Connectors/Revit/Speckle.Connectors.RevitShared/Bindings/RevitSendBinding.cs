@@ -206,8 +206,13 @@ internal sealed class RevitSendBinding : RevitBaseBinding, ISendBinding
     var elementsOnMainModel = allElements.Where(el => el is not RevitLinkInstance).ToList();
     var linkedModels = allElements.OfType<RevitLinkInstance>().ToList();
 
-    // create context for main document elements
-    List<DocumentToConvert> documentElementContexts = [new(null, activeUIDoc.Document, elementsOnMainModel)];
+    // should ideally reuse the initialized value from the scoped IConverterSettingsStore<RevitConversionSettings>.
+    // but, it's scoped and to avoid bigger scarier changes I'm re-fetching the setting here (inexpensive operation?)
+    Transform? mainModelTransform = _toSpeckleSettingsManager.GetReferencePointSetting(modelCard);
+    List<DocumentToConvert> documentElementContexts =
+    [
+      new(mainModelTransform, activeUIDoc.Document, elementsOnMainModel)
+    ];
 
     // get the linked models setting - this decision belongs at this level
     bool includeLinkedModels = _toSpeckleSettingsManager.GetLinkedModelsSetting(modelCard);
@@ -226,14 +231,18 @@ internal sealed class RevitSendBinding : RevitBaseBinding, ISendBinding
           continue;
         }
 
-        var transform = linkedModel.GetTotalTransform().Inverse;
+        // transform maps linked model elements into the main model's reference point coordinate system
+        // first apply the user's reference point transform (setting) then adjust for the linked model's placement relative to host.
+        Transform transform = (mainModelTransform ?? Transform.Identity).Multiply(
+          linkedModel.GetTotalTransform().Inverse
+        );
 
         // decision about whether to process elements is made here, not in the handler
         // only collects elements from linked models when the setting is enabled
         if (includeLinkedModels)
         {
           // handler is only responsible for element collection mechanics
-          var linkedElements = _linkedModelHandler.GetLinkedModelElements(modelCard.SendFilter, linkedDoc);
+          var linkedElements = _linkedModelHandler.GetLinkedModelElements(modelCard.SendFilter, linkedDoc, transform);
           linkedDocumentContexts.Add(new(transform, linkedDoc, linkedElements));
         }
         // ⚠️ when disabled, still adds empty contexts to maintain warning generation in RevitRootObjectBuilder
@@ -380,7 +389,7 @@ internal sealed class RevitSendBinding : RevitBaseBinding, ISendBinding
   /// </summary>
   private async Task CheckFilterExpiration()
   {
-    // NOTE: below code seems like more make sense in terms of performance but it causes unmanaged exception on Revit
+    // NOTE: below code seems like more make sense in terms of performance, but it causes unmanaged exception on Revit
     // using var viewCollector = new FilteredElementCollector(RevitContext.UIApplication?.ActiveUIDocument.Document);
     // var views = viewCollector.OfClass(typeof(View)).Cast<View>().Select(v => v.Id).ToList();
     // var intersection = ChangedObjectIds.Keys.Intersect(views).ToList();
